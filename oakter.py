@@ -1,6 +1,5 @@
 '''
 Only ESP Oakter devices are tried and tested with this code
-Currently doesnt have support for multiple Oakremotes connected together
 '''
 
 import requests
@@ -8,6 +7,12 @@ import json
 import questionary
 
 json_path = "oakter.json"
+custom_style = questionary.Style([
+    ('question', 'bold'),                # question text
+    ('answer', 'fg:#00BFFF bold'),       # selected answer
+    ('pointer', 'fg:#00BFFF bold'),      # the >> pointer
+    ('highlighted', 'fg:#00BFFF bold'),  # highlighted choice
+])
 
 with open(json_path,"r") as o:
     content = json.load(o)
@@ -63,11 +68,33 @@ def fetch_devices():
         devices.append((i["ID"], i["Alias"], i["Connected"]))
     return devices
 
-devices = fetch_devices()
-for i in devices:
-    print(f"Name: {i[1]}, Connected: {i[2]}")
-print(f"Using the first device by default {devices[0][1]}")
-OakRemoteID = devices[0][0]
+oak_devices = fetch_devices()
+
+if len(oak_devices) == 0:
+    print("No devices found")
+elif len(oak_devices) == 1:
+    print(f"Using →  |Device Name: {oak_devices[0][1]}|  |Connected: {oak_devices[0][2]}| |ID: {oak_devices[0][0]}|")
+    if oak_devices[0][2] == False:
+        print("No online Oakter devices :(")
+        exit()
+    else:
+        OakRemoteID = oak_devices[0][0]
+elif len(oak_devices) > 1:
+    device_map = {
+        f"Name: {d[1]}, ID: {d[0]}, Connected: {d[2]}": d 
+        for d in oak_devices
+    }
+
+    selected = questionary.select(
+        "Select an Oakter Device:",
+        choices=list(device_map.keys()),
+        qmark="⚡",
+        pointer="→ ",
+        style=custom_style
+    ).ask()
+
+    oak_device = device_map[selected]
+    OakRemoteID = oak_device[0]
 
 def fetch_remotes(OakRemoteID=OakRemoteID):
     header = {
@@ -108,7 +135,7 @@ def run_command(cmdID,deviceID,OakRemoteID=OakRemoteID):
     }
   
     post_req = requests.post("http://oakter.co:64807/api/ir/send",json=header).json()
-    print(post_req["Response"])
+
     if post_req["Response"] in ["Invalid SessionId for User","SessionId Missing"]:
         with open(json_path,"r+") as o:
             content = json.load(o)
@@ -124,12 +151,6 @@ def run_command(cmdID,deviceID,OakRemoteID=OakRemoteID):
         print(f"Response: {post_req["Response"]}")
 
 remotes = fetch_remotes(OakRemoteID)
-custom_style = questionary.Style([
-    ('question', 'bold'),                # question text
-    ('answer', 'fg:#00BFFF bold'),       # selected answer
-    ('pointer', 'fg:#00BFFF bold'),      # the >> pointer
-    ('highlighted', 'fg:#00BFFF bold'),  # highlighted choice
-])
 
 while 1:
     selected_device = questionary.select(
@@ -150,4 +171,4 @@ while 1:
 
     deviceID = selected_device.split()[-1].strip('()')
     cmdID = selected_command.split()[-1].strip('()')
-    run_command(cmdID,deviceID)
+    run_command(cmdID,deviceID,OakRemoteID)
